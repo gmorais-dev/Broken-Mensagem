@@ -12,12 +12,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class MensageriaEventoService {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(MensageriaEventoService.class);
+	private static final Set<String> EVENTOS_SUPORTADOS = Set.of(
+			"FRETE_CRIADO",
+			"FRETE_SAIDA_CONFIRMADA",
+			"FRETE_EM_TRANSITO",
+			"FRETE_ENTREGUE",
+			"FRETE_NAO_ENTREGUE",
+			"FRETE_CANCELADO"
+	);
 
 	private final IdempotenciaEventoService idempotenciaEventoService;
 	private final RabbitPublisherService rabbitPublisherService;
@@ -27,21 +36,27 @@ public class MensageriaEventoService {
 		validar(evento);
 
 		String chaveIdempotencia = evento.chaveIdempotencia();
-		if (!idempotenciaEventoService.registrarSeNovo(chaveIdempotencia)) {
+		if (!idempotenciaEventoService.iniciarProcessamento(chaveIdempotencia)) {
 			throw new EventoDuplicadoException("Evento ja processado: " + chaveIdempotencia);
 		}
 
-		LOGGER.info(
-				"Evento de frete recebido. evento={}, freteNumero={}, freteStatus={}",
-				evento.evento(),
-				evento.frete().numero(),
-				evento.frete().status()
-		);
+		try {
+			LOGGER.info(
+					"Evento de frete recebido. evento={}, freteNumero={}, freteStatus={}",
+					evento.evento(),
+					evento.frete().numero(),
+					evento.frete().status()
+			);
 
-		rabbitPublisherService.publicar(evento);
-		dashboardNotifierService.notificar(evento);
+			rabbitPublisherService.publicar(evento);
+			dashboardNotifierService.notificar(evento);
+			idempotenciaEventoService.concluirProcessamento(chaveIdempotencia);
 
-		return EventoFreteResponse.aceito(chaveIdempotencia);
+			return EventoFreteResponse.aceito(chaveIdempotencia);
+		} catch (RuntimeException ex) {
+			idempotenciaEventoService.liberarParaRetentativa(chaveIdempotencia);
+			throw ex;
+		}
 	}
 
 	public LoteEventoFreteResponse processarLote(LoteEventoFreteRequest lote) {
@@ -54,7 +69,7 @@ public class MensageriaEventoService {
 	}
 
 	private void validar(EventoFreteRequest evento) {
-		if (!evento.evento().startsWith("FRETE_")) {
+		if (!EVENTOS_SUPORTADOS.contains(evento.evento())) {
 			throw new EventoInvalidoException("Tipo de evento invalido para frete: " + evento.evento());
 		}
 	}
