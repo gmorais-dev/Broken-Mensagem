@@ -1,29 +1,55 @@
 package Mensageria_frete.apiMensagem.service;
 
+import Mensageria_frete.apiMensagem.dto.EventoFreteRequest;
+import Mensageria_frete.apiMensagem.entity.EventoProcessado;
+import Mensageria_frete.apiMensagem.entity.EventoProcessadoStatus;
+import Mensageria_frete.apiMensagem.repository.EventoProcessadoRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 
 @Service
+@RequiredArgsConstructor
 public class IdempotenciaEventoService {
 
-	private final Map<String, EstadoProcessamento> eventos = new ConcurrentHashMap<>();
+	private final EventoProcessadoRepository eventoProcessadoRepository;
 
-	public boolean iniciarProcessamento(String chaveIdempotencia) {
-		return eventos.putIfAbsent(chaveIdempotencia, EstadoProcessamento.PROCESSANDO) == null;
+	@Transactional
+	public boolean iniciarProcessamento(EventoFreteRequest evento, String chaveIdempotencia) {
+		Optional<EventoProcessado> eventoExistente = eventoProcessadoRepository.findByChaveIdempotencia(chaveIdempotencia);
+		if (eventoExistente.isPresent()) {
+			return prepararRetentativaSePossivel(eventoExistente.get());
+		}
+
+		try {
+			eventoProcessadoRepository.saveAndFlush(EventoProcessado.iniciar(evento, chaveIdempotencia));
+			return true;
+		} catch (DataIntegrityViolationException ex) {
+			return false;
+		}
 	}
 
+	@Transactional
 	public void concluirProcessamento(String chaveIdempotencia) {
-		eventos.replace(chaveIdempotencia, EstadoProcessamento.PROCESSANDO, EstadoProcessamento.PROCESSADO);
+		eventoProcessadoRepository.findByChaveIdempotencia(chaveIdempotencia)
+				.ifPresent(EventoProcessado::concluir);
 	}
 
-	public void liberarParaRetentativa(String chaveIdempotencia) {
-		eventos.remove(chaveIdempotencia, EstadoProcessamento.PROCESSANDO);
+	@Transactional
+	public void registrarErro(String chaveIdempotencia, Exception ex) {
+		eventoProcessadoRepository.findByChaveIdempotencia(chaveIdempotencia)
+				.ifPresent(evento -> evento.registrarErro(ex.getMessage()));
 	}
 
-	private enum EstadoProcessamento {
-		PROCESSANDO,
-		PROCESSADO
+	private boolean prepararRetentativaSePossivel(EventoProcessado eventoProcessado) {
+		if (EventoProcessadoStatus.ERRO.equals(eventoProcessado.getStatus())) {
+			eventoProcessado.reprocessar();
+			return true;
+		}
+
+		return false;
 	}
 }

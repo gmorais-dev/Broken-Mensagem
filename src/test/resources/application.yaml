@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:api_mensagem;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+app:
+  mensageria:
+    rabbit:
+      exchange: fretes.exchange
+      queue: fretes.eventos.queue
+      routing-key: fretes.eventos
+    websocket:
+      topic-fretes: /topic/fretes

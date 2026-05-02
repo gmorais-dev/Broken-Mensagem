@@ -3,19 +3,28 @@ package Mensageria_frete.apiMensagem.service;
 import Mensageria_frete.apiMensagem.dto.EventoFreteRequest;
 import Mensageria_frete.apiMensagem.dto.EventoFreteResponse;
 import Mensageria_frete.apiMensagem.dto.FretePayloadRequest;
+import Mensageria_frete.apiMensagem.entity.EventoProcessadoStatus;
 import Mensageria_frete.apiMensagem.exception.EventoDuplicadoException;
 import Mensageria_frete.apiMensagem.exception.EventoInvalidoException;
 import Mensageria_frete.apiMensagem.exception.PublicacaoMensageriaException;
+import Mensageria_frete.apiMensagem.repository.EventoProcessadoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@DataJpaTest
 class MensageriaEventoServiceTest {
+
+	@Autowired
+	private EventoProcessadoRepository eventoProcessadoRepository;
 
 	private RabbitPublisherServiceFake rabbitPublisherService;
 	private DashboardNotifierServiceFake dashboardNotifierService;
@@ -26,7 +35,7 @@ class MensageriaEventoServiceTest {
 		rabbitPublisherService = new RabbitPublisherServiceFake();
 		dashboardNotifierService = new DashboardNotifierServiceFake();
 		mensageriaEventoService = new MensageriaEventoService(
-				new IdempotenciaEventoService(),
+				new IdempotenciaEventoService(eventoProcessadoRepository),
 				rabbitPublisherService,
 				dashboardNotifierService
 		);
@@ -42,6 +51,10 @@ class MensageriaEventoServiceTest {
 		assertEquals(evento.chaveIdempotencia(), response.chaveIdempotencia());
 		assertEquals(1, rabbitPublisherService.totalPublicacoes);
 		assertEquals(1, dashboardNotifierService.totalNotificacoes);
+		assertEquals(
+				EventoProcessadoStatus.PROCESSADO,
+				eventoProcessadoRepository.findByChaveIdempotencia(evento.chaveIdempotencia()).orElseThrow().getStatus()
+		);
 	}
 
 	@Test
@@ -61,12 +74,20 @@ class MensageriaEventoServiceTest {
 		rabbitPublisherService.falharProximaPublicacao = true;
 
 		assertThrows(PublicacaoMensageriaException.class, () -> mensageriaEventoService.processar(evento));
+		assertEquals(
+				EventoProcessadoStatus.ERRO,
+				eventoProcessadoRepository.findByChaveIdempotencia(evento.chaveIdempotencia()).orElseThrow().getStatus()
+		);
 
 		EventoFreteResponse response = mensageriaEventoService.processar(evento);
 
 		assertEquals("ACEITO", response.status());
 		assertEquals(2, rabbitPublisherService.totalPublicacoes);
 		assertEquals(1, dashboardNotifierService.totalNotificacoes);
+		assertEquals(
+				EventoProcessadoStatus.PROCESSADO,
+				eventoProcessadoRepository.findByChaveIdempotencia(evento.chaveIdempotencia()).orElseThrow().getStatus()
+		);
 	}
 
 	@Test
@@ -74,6 +95,7 @@ class MensageriaEventoServiceTest {
 		EventoFreteRequest evento = evento("FRETE_DESCONHECIDO");
 
 		assertThrows(EventoInvalidoException.class, () -> mensageriaEventoService.processar(evento));
+		assertTrue(eventoProcessadoRepository.findAll().isEmpty());
 	}
 
 	private EventoFreteRequest evento(String tipoEvento) {

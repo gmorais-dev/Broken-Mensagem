@@ -36,7 +36,7 @@ public class MensageriaEventoService {
 		validar(evento);
 
 		String chaveIdempotencia = evento.chaveIdempotencia();
-		if (!idempotenciaEventoService.iniciarProcessamento(chaveIdempotencia)) {
+		if (!idempotenciaEventoService.iniciarProcessamento(evento, chaveIdempotencia)) {
 			throw new EventoDuplicadoException("Evento ja processado: " + chaveIdempotencia);
 		}
 
@@ -54,7 +54,7 @@ public class MensageriaEventoService {
 
 			return EventoFreteResponse.aceito(chaveIdempotencia);
 		} catch (RuntimeException ex) {
-			idempotenciaEventoService.liberarParaRetentativa(chaveIdempotencia);
+			idempotenciaEventoService.registrarErro(chaveIdempotencia, ex);
 			throw ex;
 		}
 	}
