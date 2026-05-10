@@ -25,7 +25,8 @@ public class MensageriaEventoService {
 			"FRETE_EM_TRANSITO",
 			"FRETE_ENTREGUE",
 			"FRETE_NAO_ENTREGUE",
-			"FRETE_CANCELADO"
+			"FRETE_CANCELADO",
+			"OCORRENCIA_FRETE_REGISTRADA"
 	);
 
 	private final IdempotenciaEventoService idempotenciaEventoService;

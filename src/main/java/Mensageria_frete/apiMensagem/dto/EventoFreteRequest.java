@@ -15,7 +15,8 @@ public record EventoFreteRequest(
 		String endpointMensageria,
 		Boolean mensageriaHabilitada,
 		@NotNull LocalDateTime dataEvento,
-		@NotNull @Valid FretePayloadRequest frete
+		@NotNull @Valid FretePayloadRequest frete,
+		@Valid OcorrenciaPayloadRequest ocorrencia
 ) {
 	public String chaveIdempotencia() {
 		return evento + ":" + frete.id() + ":" + dataEvento;
