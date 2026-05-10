@@ -3,6 +3,7 @@ package Mensageria_frete.apiMensagem.service;
 import Mensageria_frete.apiMensagem.dto.EventoFreteRequest;
 import Mensageria_frete.apiMensagem.dto.EventoFreteResponse;
 import Mensageria_frete.apiMensagem.dto.FretePayloadRequest;
+import Mensageria_frete.apiMensagem.dto.OcorrenciaPayloadRequest;
 import Mensageria_frete.apiMensagem.entity.EventoProcessadoStatus;
 import Mensageria_frete.apiMensagem.exception.EventoDuplicadoException;
 import Mensageria_frete.apiMensagem.exception.EventoInvalidoException;
@@ -58,6 +59,38 @@ class MensageriaEventoServiceTest {
 	}
 
 	@Test
+	void deveProcessarEventoDeOcorrenciaRegistrada() {
+		EventoFreteRequest evento = evento("OCORRENCIA_FRETE_REGISTRADA", ocorrencia());
+
+		EventoFreteResponse response = mensageriaEventoService.processar(evento);
+
+		assertEquals("ACEITO", response.status());
+		assertEquals(evento.chaveIdempotencia(), response.chaveIdempotencia());
+		assertEquals(1, rabbitPublisherService.totalPublicacoes);
+		assertEquals(1, dashboardNotifierService.totalNotificacoes);
+		assertEquals(
+				EventoProcessadoStatus.PROCESSADO,
+				eventoProcessadoRepository.findByChaveIdempotencia(evento.chaveIdempotencia()).orElseThrow().getStatus()
+		);
+	}
+
+	@Test
+	void deveProcessarEventoDeFreteComBlocoOpcionalDeOcorrencia() {
+		EventoFreteRequest evento = evento("FRETE_ENTREGUE", ocorrencia());
+
+		EventoFreteResponse response = mensageriaEventoService.processar(evento);
+
+		assertEquals("ACEITO", response.status());
+		assertEquals(evento.chaveIdempotencia(), response.chaveIdempotencia());
+		assertEquals(1, rabbitPublisherService.totalPublicacoes);
+		assertEquals(1, dashboardNotifierService.totalNotificacoes);
+		assertEquals(
+				EventoProcessadoStatus.PROCESSADO,
+				eventoProcessadoRepository.findByChaveIdempotencia(evento.chaveIdempotencia()).orElseThrow().getStatus()
+		);
+	}
+
+	@Test
 	void deveBloquearEventoDuplicadoDepoisDoSucesso() {
 		EventoFreteRequest evento = evento("FRETE_CRIADO");
 
@@ -99,6 +132,10 @@ class MensageriaEventoServiceTest {
 	}
 
 	private EventoFreteRequest evento(String tipoEvento) {
+		return evento(tipoEvento, null);
+	}
+
+	private EventoFreteRequest evento(String tipoEvento, OcorrenciaPayloadRequest ocorrencia) {
 		return new EventoFreteRequest(
 				"1.0",
 				tipoEvento,
@@ -118,7 +155,21 @@ class MensageriaEventoServiceTest {
 						"Curitiba/PR",
 						new BigDecimal("9900.0"),
 						new BigDecimal("9900.0")
-				)
+				),
+				ocorrencia
+		);
+	}
+
+	private OcorrenciaPayloadRequest ocorrencia() {
+		return new OcorrenciaPayloadRequest(
+				"AVARIA",
+				"Avaria",
+				LocalDateTime.of(2026, 5, 10, 14, 35),
+				"Fortaleza",
+				"CE",
+				"Embalagem lateral danificada.",
+				"",
+				""
 		);
 	}
 

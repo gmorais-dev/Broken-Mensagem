@@ -72,7 +72,8 @@ class IdempotenciaEventoServiceTest {
 						"Curitiba/PR",
 						new BigDecimal("9900.0"),
 						new BigDecimal("9900.0")
-				)
+				),
+				null
 		);
 	}
 }
