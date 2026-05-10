@@ -21,7 +21,7 @@ public class IdempotenciaEventoService {
 	public boolean iniciarProcessamento(EventoFreteRequest evento, String chaveIdempotencia) {
 		Optional<EventoProcessado> eventoExistente = eventoProcessadoRepository.findByChaveIdempotencia(chaveIdempotencia);
 		if (eventoExistente.isPresent()) {
-			return prepararRetentativaSePossivel(eventoExistente.get());
+			return prepararRetentativaSePossivel(chaveIdempotencia, eventoExistente.get());
 		}
 
 		try {
@@ -44,10 +44,13 @@ public class IdempotenciaEventoService {
 				.ifPresent(evento -> evento.registrarErro(ex.getMessage()));
 	}
 
-	private boolean prepararRetentativaSePossivel(EventoProcessado eventoProcessado) {
+	private boolean prepararRetentativaSePossivel(String chaveIdempotencia, EventoProcessado eventoProcessado) {
 		if (EventoProcessadoStatus.ERRO.equals(eventoProcessado.getStatus())) {
-			eventoProcessado.reprocessar();
-			return true;
+			return eventoProcessadoRepository.atualizarStatusSeCorresponder(
+					chaveIdempotencia,
+					EventoProcessadoStatus.ERRO,
+					EventoProcessadoStatus.PROCESSANDO
+			) > 0;
 		}
 
 		return false;

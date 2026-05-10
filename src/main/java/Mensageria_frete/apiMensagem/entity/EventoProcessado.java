@@ -65,12 +65,6 @@ public class EventoProcessado {
 		return eventoProcessado;
 	}
 
-	public void reprocessar() {
-		this.status = EventoProcessadoStatus.PROCESSANDO;
-		this.dataProcessamento = null;
-		this.mensagemErro = null;
-	}
-
 	public void concluir() {
 		this.status = EventoProcessadoStatus.PROCESSADO;
 		this.dataProcessamento = LocalDateTime.now();
